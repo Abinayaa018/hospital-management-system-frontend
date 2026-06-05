@@ -6,9 +6,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Heart } from "lucide-react"
+import { API_BASE_URL } from "@/lib/api"
 
 export default function RegisterPage() {
-  const [name, setName] = useState("")
+  const [firstname, setFirstname] = useState("")
+  const [lastname, setLastname] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
@@ -22,31 +24,34 @@ export default function RegisterPage() {
   const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
   const passwordRegex = /^(?=.{8,})(?=.*[A-Za-z])(?=.*\d).*/
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setFormError("")
 
-    if (!name.trim()) return setFormError("Please enter your name.")
+    if (!firstname.trim()) return setFormError("Please enter your first name.")
+    if (!lastname.trim()) return setFormError("Please enter your last name.")
     if (!emailRegex.test(email)) return setEmailError("Please enter a valid email.")
     if (!passwordRegex.test(password)) return setPasswordError("Password must be at least 8 characters and include letters and numbers.")
     if (password !== confirmPassword) return setFormError("Passwords do not match.")
 
     setIsLoading(true)
     try {
-      const raw = localStorage.getItem("kenko_users")
-      const users = raw ? JSON.parse(raw) as Array<any> : []
-      const exists = users.some((u: any) => u.email === email)
-      if (exists) {
+      const res = await fetch(`${API_BASE_URL}/api/signup`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ firstname, lastname, email, password, role: "User" }),
+      })
+      const data = await res.json()
+      if (res.status === 409) {
         setFormError("An account with this email already exists.")
-        setIsLoading(false)
         return
       }
-
-      users.push({ name, email, password, role: "User" })
-      localStorage.setItem("kenko_users", JSON.stringify(users))
-      // redirect to login
+      if (!res.ok) {
+        setFormError(data.message || "Failed to create account. Please try again.")
+        return
+      }
       router.push("/login")
-    } catch (e) {
+    } catch {
       setFormError("Failed to create account. Please try again.")
     } finally {
       setIsLoading(false)
@@ -76,8 +81,13 @@ export default function RegisterPage() {
               )}
 
               <div className="space-y-2">
-                <label className="text-sm font-medium text-foreground">Full name</label>
-                <Input value={name} onChange={(e) => setName(e.target.value)} className="h-11" />
+                <label className="text-sm font-medium text-foreground">First name</label>
+                <Input value={firstname} onChange={(e) => setFirstname(e.target.value)} className="h-11" />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-foreground">Last name</label>
+                <Input value={lastname} onChange={(e) => setLastname(e.target.value)} className="h-11" />
               </div>
 
               <div className="space-y-2">

@@ -1,6 +1,7 @@
 "use client"
 
 import { createContext, useContext, useState, type ReactNode } from "react"
+import { API_BASE_URL } from "@/lib/api"
 
 interface User {
   name: string
@@ -25,23 +26,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const login = async (email: string, password: string): Promise<LoginResult> => {
     try {
-      const raw = localStorage.getItem("kenko_users")
-      const users = raw ? JSON.parse(raw) as Array<any> : []
-      const user = users.find((u: any) => u.email === email)
-      if (!user) {
-        return "not_found"
-      }
-      if (user.password !== password) {
-        return "invalid_password"
-      }
+      const res = await fetch(`${API_BASE_URL}/api/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, password }),
+      })
+      if (res.status === 404) return "not_found"
+      if (res.status === 401) return "invalid_password"
+      if (!res.ok) return "error"
+      const data = await res.json()
       setUser({
-        name: user.name || "User",
-        email: user.email,
-        role: user.role || "User",
-        avatar: user.avatar,
+        name: data.name || "User",
+        email: data.email,
+        role: data.role || "User",
+        avatar: data.avatar,
       })
       return "success"
-    } catch (e) {
+    } catch {
       return "error"
     }
   }
