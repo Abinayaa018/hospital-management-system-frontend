@@ -48,16 +48,21 @@ export default function RegisterPage() {
       } catch {
         data = null
       }
+      const errorMessage = data?.message || text || `Failed to create account. Please try again. (${res.status})`
+      if (!res.ok) {
+        console.error("Signup failed", { status: res.status, message: errorMessage })
+      }
       if (res.status === 409) {
         setFormError(data?.message || "An account with this email already exists.")
         return
       }
       if (!res.ok) {
-        setFormError(data?.message || text || `Failed to create account. Please try again. (${res.status})`)
+        setFormError(errorMessage)
         return
       }
       router.push("/login")
     } catch (error) {
+      console.error("Signup request error", error)
       setFormError(
         error instanceof Error
           ? error.message
