@@ -1,10 +1,11 @@
 "use client"
 
+import { useEffect, useState } from "react"
 import { useRoleGuard } from "@/lib/role-guard"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Download, TrendingUp, Users, Calendar, DollarSign, Activity, FileText } from "lucide-react"
-import { dashboardStats, patientTrends, departmentStats } from "@/lib/mock-data"
+import { api } from "@/lib/api"
 import {
   AreaChart,
   Area,
@@ -23,37 +24,72 @@ import {
   Line,
 } from "recharts"
 
-const revenueData = [
-  { month: "Jul", revenue: 85000, expenses: 52000 },
-  { month: "Aug", revenue: 92000, expenses: 55000 },
-  { month: "Sep", revenue: 98000, expenses: 58000 },
-  { month: "Oct", revenue: 105000, expenses: 62000 },
-  { month: "Nov", revenue: 115000, expenses: 68000 },
-  { month: "Dec", revenue: 125600, expenses: 72000 },
-]
+// Reports charts should be data-driven; no hardcoded mock chart datasets.
 
-const appointmentTypes = [
-  { name: "Consultation", value: 35, color: "#2a9d8f" },
-  { name: "Follow-up", value: 28, color: "#6bbcba" },
-  { name: "Emergency", value: 12, color: "#e05c6a" },
-  { name: "Check-up", value: 25, color: "#1a3340" },
-]
-
-const weeklyPatients = [
-  { day: "Mon", patients: 45 },
-  { day: "Tue", patients: 52 },
-  { day: "Wed", patients: 48 },
-  { day: "Thu", patients: 61 },
-  { day: "Fri", patients: 55 },
-  { day: "Sat", patients: 38 },
-  { day: "Sun", patients: 22 },
-]
 
 export default function ReportsPage() {
   const { hasAccess, loaded } = useRoleGuard(["Admin"])
+  const [reportData, setReportData] = useState({
+    stats: {
+      totalPatients: 0,
+      totalAppointments: 0,
+      monthlyRevenue: 0,
+      patientGrowth: 0,
+      appointmentGrowth: 0,
+      revenueGrowth: 0,
+    },
+    departmentStats: [] as { name: string; patients: number; color: string }[],
+    appointmentTypes: [] as { name: string; value: number; color: string }[],
+  })
+
+  useEffect(() => {
+    if (!hasAccess) return
+
+    const fetchReports = async () => {
+      try {
+        setReportData(await api.get("/api/dashboard"))
+      } catch (error) {
+        console.error(error)
+      }
+    }
+
+    fetchReports()
+  }, [hasAccess])
 
   if (!loaded) return <div className="flex min-h-screen items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>
   if (!hasAccess) return null
+
+  const departmentStats = reportData.departmentStats.length
+    ? reportData.departmentStats
+    : [{ name: "No data", patients: 0, color: "#2a9d8f" }]
+
+  const appointmentTypes = reportData.appointmentTypes.length
+    ? reportData.appointmentTypes
+    : []
+
+  const revenueSeries = (reportData as any).revenueSeries as { month: string; revenue: number }[]
+  const expensesSeries = (reportData as any).expensesSeries as { month: string; expenses: number }[]
+
+  const revenueVsExpenses = revenueSeries.map((r, idx) => ({
+    month: r.month,
+    revenue: r.revenue,
+    expenses: expensesSeries[idx]?.expenses ?? 0,
+  }))
+
+  const weeklyPatientsSeries = ((reportData as any).weeklyPatients ?? []) as { day: string; patients: number }[]
+
+
+
+
+  const handleExport = (name = "kenko-report") => {
+    const blob = new Blob([JSON.stringify(reportData, null, 2)], { type: "application/json" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${name}.json`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <div className="space-y-6">
@@ -62,7 +98,7 @@ export default function ReportsPage() {
           <h1 className="text-3xl font-bold text-foreground">Reports & Analytics</h1>
           <p className="text-muted-foreground">Comprehensive insights and hospital performance metrics</p>
         </div>
-        <Button className="gap-2">
+        <Button className="gap-2" onClick={() => handleExport("kenko-full-report")}>
           <Download className="h-4 w-4" />
           Export Report
         </Button>
@@ -78,8 +114,8 @@ export default function ReportsPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Total Patients</p>
-                <p className="text-2xl font-bold">{dashboardStats.totalPatients.toLocaleString()}</p>
-                <p className="text-xs text-green-600">+{dashboardStats.patientGrowth}% this month</p>
+                <p className="text-2xl font-bold">{reportData.stats.totalPatients.toLocaleString()}</p>
+                <p className="text-xs text-green-600">+{reportData.stats.patientGrowth}% this month</p>
               </div>
             </div>
           </CardContent>
@@ -92,8 +128,8 @@ export default function ReportsPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Appointments</p>
-                <p className="text-2xl font-bold">2,847</p>
-                <p className="text-xs text-green-600">+{dashboardStats.appointmentGrowth}% this month</p>
+                <p className="text-2xl font-bold">{reportData.stats.totalAppointments.toLocaleString()}</p>
+                <p className="text-xs text-green-600">+{reportData.stats.appointmentGrowth}% this month</p>
               </div>
             </div>
           </CardContent>
@@ -106,8 +142,8 @@ export default function ReportsPage() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Revenue</p>
-                <p className="text-2xl font-bold">${(dashboardStats.monthlyRevenue / 1000).toFixed(1)}K</p>
-                <p className="text-xs text-green-600">+{dashboardStats.revenueGrowth}% this month</p>
+                <p className="text-2xl font-bold">Rs. {(reportData.stats.monthlyRevenue / 1000).toFixed(1)}K</p>
+                <p className="text-xs text-green-600">+{reportData.stats.revenueGrowth}% this month</p>
               </div>
             </div>
           </CardContent>
@@ -140,7 +176,7 @@ export default function ReportsPage() {
         <CardContent>
           <div className="h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={revenueData}>
+              <AreaChart data={revenueVsExpenses}>
                 <defs>
                   <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="5%" stopColor="#2a9d8f" stopOpacity={0.4} />
@@ -238,7 +274,7 @@ export default function ReportsPage() {
           <CardContent>
             <div className="h-[300px]">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={weeklyPatients}>
+                <BarChart data={weeklyPatientsSeries}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#b0dbd8" />
                   <XAxis dataKey="day" stroke="#3d6472" fontSize={12} />
                   <YAxis stroke="#3d6472" fontSize={12} />
@@ -315,7 +351,7 @@ export default function ReportsPage() {
                   <p className="font-medium text-foreground">{report.name}</p>
                   <p className="text-xs text-muted-foreground">{report.description}</p>
                 </div>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" onClick={() => handleExport(report.name.toLowerCase().replace(/\s+/g, "-"))}>
                   <Download className="h-4 w-4" />
                 </Button>
               </div>

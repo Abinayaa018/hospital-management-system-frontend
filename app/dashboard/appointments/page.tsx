@@ -8,13 +8,15 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, Di
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Search, Plus, MoreHorizontal, Calendar, Clock, Stethoscope, CheckCircle, XCircle, Trash2 } from "lucide-react"
 import { api } from "@/lib/api"
+import { useAuth } from "@/lib/auth-context"
 
 type Appointment = { _id: string; patientName: string; doctorName: string; date: string; time: string; type: string; status: string; department: string }
 
 const emptyForm = { patientName: "", doctorName: "", date: "", time: "", type: "Consultation", status: "Pending", department: "" }
-const statusFilters = ["All", "Confirmed", "Pending", "In Progress", "Completed", "Cancelled"]
+const statusFilters = ["All", "Pending", "Approved", "Declined", "In Progress", "Completed", "Confirmed", "Cancelled"]
 
 export default function AppointmentsPage() {
+  const { user } = useAuth()
   const [appointments, setAppointments] = useState<Appointment[]>([])
   const [searchQuery, setSearchQuery] = useState("")
   const [filterStatus, setFilterStatus] = useState("All")
@@ -32,7 +34,7 @@ export default function AppointmentsPage() {
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault()
-    await api.post("/api/appointments", form)
+    await api.post("/api/appointments", { ...form, status: "Pending" })
     setIsAddOpen(false); setForm(emptyForm); fetchAppointments()
   }
 
@@ -55,6 +57,8 @@ export default function AppointmentsPage() {
 
   const getStatusColor = (status: string) => {
     switch (status) {
+      case "Approved": return "bg-green-100 text-green-700"
+      case "Declined": return "bg-red-100 text-red-700"
       case "Confirmed": return "bg-green-100 text-green-700"
       case "Pending": return "bg-yellow-100 text-yellow-700"
       case "In Progress": return "bg-primary/10 text-primary"
@@ -63,6 +67,9 @@ export default function AppointmentsPage() {
       default: return "bg-muted text-muted-foreground"
     }
   }
+
+  const isDoctor = user?.role === "Doctor"
+  const isAdmin = user?.role === "Admin"
 
   const getTypeColor = (type: string) => {
     switch (type) {
@@ -144,15 +151,21 @@ export default function AppointmentsPage() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Button variant="outline" size="sm" className="gap-1" onClick={() => handleStatusUpdate(apt._id, "Confirmed")}><CheckCircle className="h-4 w-4" /><span className="hidden sm:inline">Confirm</span></Button>
-                    <Button variant="outline" size="sm" className="gap-1 text-destructive hover:text-destructive" onClick={() => handleStatusUpdate(apt._id, "Cancelled")}><XCircle className="h-4 w-4" /><span className="hidden sm:inline">Cancel</span></Button>
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleStatusUpdate(apt._id, "Completed")}><CheckCircle className="mr-2 h-4 w-4" />Mark Completed</DropdownMenuItem>
-                        <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(apt._id)}><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
+                    {(isDoctor || isAdmin) && (
+                      <>
+                        <Button variant="outline" size="sm" className="gap-1" onClick={() => handleStatusUpdate(apt._id, "Approved")}><CheckCircle className="h-4 w-4" /><span className="hidden sm:inline">Approve</span></Button>
+                        <Button variant="outline" size="sm" className="gap-1 text-destructive hover:text-destructive" onClick={() => handleStatusUpdate(apt._id, "Declined")}><XCircle className="h-4 w-4" /><span className="hidden sm:inline">Decline</span></Button>
+                      </>
+                    )}
+                    {(isDoctor || isAdmin) && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreHorizontal className="h-4 w-4" /></Button></DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleStatusUpdate(apt._id, "Completed")}><CheckCircle className="mr-2 h-4 w-4" />Mark Completed</DropdownMenuItem>
+                          {isAdmin && <DropdownMenuItem className="text-destructive" onClick={() => handleDelete(apt._id)}><Trash2 className="mr-2 h-4 w-4" />Delete</DropdownMenuItem>}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
                 </div>
               ))}

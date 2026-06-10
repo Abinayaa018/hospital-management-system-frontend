@@ -1,10 +1,12 @@
 "use client"
 
 import Image from "next/image"
+import Link from "next/link"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Users, Calendar, UserCog, DollarSign, TrendingUp, TrendingDown, Activity, Clock, Heart, Shield, Award, Phone, Mail, MapPin, Star, ArrowRight, Stethoscope, Ambulance, Building2, Receipt } from "lucide-react"
-import { dashboardStats, patientTrends, departmentStats, recentActivity, mockAppointments, mockDoctors } from "@/lib/mock-data"
+import { api } from "@/lib/api"
 import {
   AreaChart,
   Area,
@@ -21,36 +23,41 @@ import {
   Legend,
 } from "recharts"
 
-const statsCards = [
-  {
-    title: "Total Patients",
-    value: dashboardStats.totalPatients.toLocaleString(),
-    change: dashboardStats.patientGrowth,
-    icon: Users,
-    trend: "up",
+type DashboardData = {
+  stats: {
+    totalPatients: number
+    todayAppointments: number
+    totalAppointments: number
+    availableDoctors: number
+    monthlyRevenue: number
+    patientGrowth: number
+    appointmentGrowth: number
+    revenueGrowth: number
+  }
+  patientTrends: { month: string; patients: number; appointments: number }[]
+  departmentStats: { name: string; patients: number; color: string }[]
+  upcomingAppointments: { _id: string; patientName: string; doctorName: string; time: string; status: string }[]
+  featuredDoctors: { _id: string; name: string; specialty: string; rating?: number; patients?: number; status?: string; experience?: string }[]
+  recentActivity: { id: string; action: string; patient: string; time: string; type: string }[]
+}
+
+const emptyDashboard: DashboardData = {
+  stats: {
+    totalPatients: 0,
+    todayAppointments: 0,
+    totalAppointments: 0,
+    availableDoctors: 0,
+    monthlyRevenue: 0,
+    patientGrowth: 0,
+    appointmentGrowth: 0,
+    revenueGrowth: 0,
   },
-  {
-    title: "Today's Appointments",
-    value: dashboardStats.todayAppointments,
-    change: dashboardStats.appointmentGrowth,
-    icon: Calendar,
-    trend: "up",
-  },
-  {
-    title: "Available Doctors",
-    value: dashboardStats.availableDoctors,
-    change: -2,
-    icon: UserCog,
-    trend: "down",
-  },
-  {
-    title: "Monthly Revenue",
-    value: `$${(dashboardStats.monthlyRevenue / 1000).toFixed(1)}K`,
-    change: dashboardStats.revenueGrowth,
-    icon: DollarSign,
-    trend: "up",
-  },
-]
+  patientTrends: [],
+  departmentStats: [],
+  upcomingAppointments: [],
+  featuredDoctors: [],
+  recentActivity: [],
+}
 
 const hospitalFeatures = [
   {
@@ -83,8 +90,54 @@ const quickStats = [
 ]
 
 export default function DashboardPage() {
-  const upcomingAppointments = mockAppointments.slice(0, 5)
-  const featuredDoctors = mockDoctors.slice(0, 3)
+  const [dashboard, setDashboard] = useState<DashboardData>(emptyDashboard)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const fetchDashboard = async () => {
+      try {
+        setDashboard(await api.get("/api/dashboard"))
+      } catch (error) {
+        console.error(error)
+      } finally {
+        setLoading(false)
+      }
+    }
+
+    fetchDashboard()
+  }, [])
+
+  const statsCards = useMemo(() => [
+    {
+      title: "Total Patients",
+      value: dashboard.stats.totalPatients.toLocaleString(),
+      change: dashboard.stats.patientGrowth,
+      icon: Users,
+    },
+    {
+      title: "Today's Appointments",
+      value: dashboard.stats.todayAppointments,
+      change: dashboard.stats.appointmentGrowth,
+      icon: Calendar,
+    },
+    {
+      title: "Available Doctors",
+      value: dashboard.stats.availableDoctors,
+      change: 0,
+      icon: UserCog,
+    },
+    {
+      title: "Monthly Revenue",
+      value: `Rs. ${(dashboard.stats.monthlyRevenue / 1000).toFixed(1)}K`,
+      change: dashboard.stats.revenueGrowth,
+      icon: DollarSign,
+    },
+  ], [dashboard])
+
+  const upcomingAppointments = dashboard.upcomingAppointments.slice(0, 5)
+  const featuredDoctors = dashboard.featuredDoctors.slice(0, 3)
+  const patientTrends = dashboard.patientTrends.length ? dashboard.patientTrends : [{ month: "Now", patients: 0, appointments: 0 }]
+  const departmentStats = dashboard.departmentStats.length ? dashboard.departmentStats : [{ name: "No data", patients: 0, color: "#2a9d8f" }]
 
   return (
     <div className="space-y-8">
@@ -95,12 +148,16 @@ export default function DashboardPage() {
           <p className="text-muted-foreground">Welcome back! Here&apos;s what&apos;s happening today.</p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" size="sm">
+          <Button variant="outline" size="sm" asChild>
+            <Link href="/dashboard/reports">
             Download Report
+            </Link>
           </Button>
-          <Button size="sm">
+          <Button size="sm" asChild>
+            <Link href="/dashboard/appointments">
             <Calendar className="mr-2 h-4 w-4" />
             Schedule Appointment
+            </Link>
           </Button>
         </div>
       </div>
@@ -115,12 +172,12 @@ export default function DashboardPage() {
                   <p className="text-sm font-medium text-muted-foreground">{stat.title}</p>
                   <p className="mt-1 text-2xl font-bold text-foreground">{stat.value}</p>
                   <div className="mt-1 flex items-center gap-1">
-                    {stat.trend === "up" ? (
+                    {stat.change >= 0 ? (
                       <TrendingUp className="h-4 w-4 text-green-600" />
                     ) : (
                       <TrendingDown className="h-4 w-4 text-red-500" />
                     )}
-                    <span className={`text-sm ${stat.trend === "up" ? "text-green-600" : "text-red-500"}`}>
+                    <span className={`text-sm ${stat.change >= 0 ? "text-green-600" : "text-red-500"}`}>
                       {Math.abs(stat.change)}%
                     </span>
                     <span className="text-xs text-muted-foreground">vs last month</span>
@@ -276,13 +333,15 @@ export default function DashboardPage() {
             <h2 className="text-xl font-bold text-foreground">Our Top Doctors</h2>
             <p className="text-sm text-muted-foreground">Meet our experienced medical professionals</p>
           </div>
-          <Button variant="ghost" size="sm" className="gap-1 text-primary">
+          <Button variant="ghost" size="sm" className="gap-1 text-primary" asChild>
+            <Link href="/dashboard/doctors">
             View All <ArrowRight className="h-4 w-4" />
+            </Link>
           </Button>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {featuredDoctors.map((doctor) => (
-            <Card key={doctor.id} className="overflow-hidden border-border/50 transition-all hover:border-primary/30 hover:shadow-md">
+            <Card key={doctor._id} className="overflow-hidden border-border/50 transition-all hover:border-primary/30 hover:shadow-md">
               <div className="relative h-48">
                 <Image
                   src="/images/doctor-hero.jpg"
@@ -300,8 +359,8 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm font-medium">{doctor.rating}</span>
-                    <span className="text-xs text-muted-foreground">({doctor.patients}+ patients)</span>
+                  <span className="text-sm font-medium">{doctor.rating || 0}</span>
+                  <span className="text-xs text-muted-foreground">({doctor.patients || 0}+ patients)</span>
                   </div>
                   <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${
                     doctor.status === "Available" ? "bg-green-100 text-green-700" : "bg-yellow-100 text-yellow-700"
@@ -309,11 +368,12 @@ export default function DashboardPage() {
                     {doctor.status}
                   </span>
                 </div>
-                <p className="mt-2 text-xs text-muted-foreground">{doctor.experience} experience</p>
-                <Button className="mt-3 w-full" size="sm">Book Appointment</Button>
+                <p className="mt-2 text-xs text-muted-foreground">{doctor.experience || "Experience not listed"} experience</p>
+                <Button className="mt-3 w-full" size="sm" asChild><Link href="/dashboard/appointments">Book Appointment</Link></Button>
               </CardContent>
             </Card>
           ))}
+          {!loading && featuredDoctors.length === 0 && <p className="text-sm text-muted-foreground">No doctors have been added yet.</p>}
         </div>
       </div>
 
@@ -351,14 +411,14 @@ export default function DashboardPage() {
                 </CardTitle>
                 <CardDescription>Today&apos;s scheduled appointments</CardDescription>
               </div>
-              <Button variant="outline" size="sm">View All</Button>
+              <Button variant="outline" size="sm" asChild><Link href="/dashboard/appointments">View All</Link></Button>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {upcomingAppointments.map((apt) => (
                 <div
-                  key={apt.id}
+                  key={apt._id}
                   className="flex items-center justify-between rounded-lg border border-border/50 p-3 transition-colors hover:bg-muted/50"
                 >
                   <div className="flex items-center gap-3">
@@ -386,6 +446,7 @@ export default function DashboardPage() {
                   </div>
                 </div>
               ))}
+              {!loading && upcomingAppointments.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">No upcoming appointments yet.</p>}
             </div>
           </CardContent>
         </Card>
@@ -401,17 +462,18 @@ export default function DashboardPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {recentActivity.map((activity) => (
+              {dashboard.recentActivity.map((activity) => (
                 <div key={activity.id} className="flex items-start gap-3">
                   <div className="mt-0.5 h-2 w-2 rounded-full bg-primary" />
                   <div className="flex-1">
                     <p className="text-sm font-medium text-foreground">{activity.action}</p>
                     <p className="text-xs text-muted-foreground">
-                      {activity.patient} - {activity.time}
+                      {activity.patient} - {new Date(activity.time).toLocaleString()}
                     </p>
                   </div>
                 </div>
               ))}
+              {!loading && dashboard.recentActivity.length === 0 && <p className="text-sm text-muted-foreground">No activity recorded yet.</p>}
             </div>
           </CardContent>
         </Card>
@@ -450,8 +512,8 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="mt-6 flex gap-3">
-              <Button>Contact Us</Button>
-              <Button variant="outline">View Careers</Button>
+              <Button asChild><a href="mailto:contact@kenkohospital.com">Contact Us</a></Button>
+              <Button variant="outline" asChild><Link href="/dashboard/doctors">View Doctors</Link></Button>
             </div>
           </CardContent>
         </div>
@@ -459,6 +521,7 @@ export default function DashboardPage() {
 
       {/* Quick Actions */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <Link href="/dashboard/doctors" className="block">
         <Card className="cursor-pointer border-border/50 transition-all hover:border-primary/30 hover:shadow-md">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-primary/10">
@@ -470,6 +533,8 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        </Link>
+        <Link href="/dashboard/appointments" className="block">
         <Card className="cursor-pointer border-border/50 transition-all hover:border-primary/30 hover:shadow-md">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-secondary/30">
@@ -481,6 +546,8 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        </Link>
+        <Link href="/dashboard/billing" className="block">
         <Card className="cursor-pointer border-border/50 transition-all hover:border-primary/30 hover:shadow-md">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-muted">
@@ -492,6 +559,8 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        </Link>
+        <a href="tel:108" className="block">
         <Card className="cursor-pointer border-border/50 transition-all hover:border-primary/30 hover:shadow-md">
           <CardContent className="flex items-center gap-4 p-4">
             <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-destructive/10">
@@ -503,6 +572,7 @@ export default function DashboardPage() {
             </div>
           </CardContent>
         </Card>
+        </a>
       </div>
     </div>
   )
