@@ -20,8 +20,6 @@ import {
   PieChart,
   Pie,
   Legend,
-  LineChart,
-  Line,
 } from "recharts"
 
 // Reports charts should be data-driven; no hardcoded mock chart datasets.
